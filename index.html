@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Photostrip</title>
+
+<!-- ============ CSS: urusan tampilan (warna, ukuran, posisi) ============ -->
+<style>
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: #20305a;            /* warna latar halaman, ganti sesukamu */
+    color: #fff;
+    font-family: "Trebuchet MS", Verdana, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+    box-sizing: border-box;
+  }
+  h1 { font-size: 1.6rem; margin: 0 0 16px; }
+
+  /* kotak kamera */
+  .kamera {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    aspect-ratio: 4 / 3;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);          /* dibalik seperti cermin */
+  }
+  /* angka hitung mundur */
+  #hitung {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 7rem; font-weight: bold;
+    text-shadow: 0 2px 12px rgba(0,0,0,.6);
+  }
+  /* efek kilat saat foto diambil */
+  #kilat {
+    position: absolute; inset: 0;
+    background: #fff; opacity: 0;
+    transition: opacity .35s;
+    pointer-events: none;
+  }
+  #areaKamera {
+  width: 100%;
+  max-width: 480px;
+  text-align: center;
+}
+  #status { margin: 14px 0 10px; min-height: 1.4em; }
+
+  button {
+    font: inherit;
+    padding: 12px 28px;
+    border: 0; border-radius: 999px;
+    background: #fff; color: #20305a;
+    cursor: pointer;
+  }
+  button:hover { background: #e6ebff; }
+  button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible { outline: 3px solid #ffd54a; outline-offset: 2px; }
+
+  /* hasil photostrip */
+  #hasil { display: none; flex-direction: column; align-items: center; gap: 14px; }
+  #hasil canvas {
+    height: min(70vh, 640px);       /* ukuran tampil di layar saja, file asli tetap tajam */
+    width: auto;
+    box-shadow: 0 8px 30px rgba(0,0,0,.4);
+  }
+  .tombol { display: flex; gap: 10px; }
+</style>
+</head>
+
+<body>
+  <!-- ============ HTML: kerangka halaman ============ -->
+  <h1>Lupikori's Mini Studio</h1>
+
+  <div id="areaKamera">
+    <div class="kamera">
+      <video id="video" autoplay playsinline muted></video>
+      <div id="hitung"></div>
+      <div id="kilat"></div>
+    </div>
+    <p id="status">Izinkan kamera ya, lalu tekan Mulai.</p>
+    <button id="btnMulai" disabled>Start</button>
+  </div>
+
+  <div id="hasil">
+    <canvas id="strip"></canvas>
+    <div class="tombol">
+      <button id="btnUnduh">Download</button>
+      <button id="btnUlang">Retake</button>
+    </div>
+  </div>
+
+<!-- ============ JavaScript: yang bikin semuanya bergerak ============ -->
+<script>
+  // ---------------------------------------------------------
+  // BAGIAN 1: PENGATURAN (yang paling enak buat diutak-atik)
+  // Semua ukuran dalam cm, nanti otomatis diubah jadi piksel.
+  // ---------------------------------------------------------
+  const LEBAR_STRIP    = 6;    // lebar seluruh strip (cm)
+  const MARGIN_TEPI    = 0.3;  // margin kiri, kanan, dan atas (cm) -> tipis
+  const JARAK_ANTAR    = 0.3;  // jarak antar foto (cm)
+  const MARGIN_BAWAH   = 3;    // ruang kosong di bawah (cm)
+  const RASIO_FOTO     = 4 / 3; // lebar : tinggi tiap foto (4/3 = landscape, 1 = kotak)
+  const JUMLAH_FOTO    = 3;
+  const WARNA_FRAME    = "#ffffff";  // warna frame polos
+  const HITUNG_MUNDUR  = 3;    // detik sebelum tiap foto
+  const JEDA_ANTAR_FOTO = 1200; // milidetik jeda setelah foto diambil
+
+  // Nanti untuk desain buatanmu: isi dengan nama file, contoh "frame.png"
+  // Biarkan "" kalau masih pakai frame putih polos.
+  const GAMBAR_FRAME   = "";
+
+  // Resolusi: 118 piksel per cm kira-kira setara kualitas cetak 300 dpi
+  const PX_PER_CM = 118;
+
+  // ---------------------------------------------------------
+  // BAGIAN 2: HITUNG UKURAN (otomatis, tidak perlu diubah)
+  // ---------------------------------------------------------
+  const cm = (n) => Math.round(n * PX_PER_CM);
+
+  const lebarStrip  = cm(LEBAR_STRIP);
+  const margin      = cm(MARGIN_TEPI);
+  const jarak       = cm(JARAK_ANTAR);
+  const lebarFoto   = lebarStrip - margin * 2;
+  const tinggiFoto  = Math.round(lebarFoto / RASIO_FOTO);
+  const tinggiStrip = margin
+                    + tinggiFoto * JUMLAH_FOTO
+                    + jarak * (JUMLAH_FOTO - 1)
+                    + cm(MARGIN_BAWAH);
+
+  // ---------------------------------------------------------
+  // BAGIAN 3: AMBIL ELEMEN DARI HTML
+  // ---------------------------------------------------------
+  const video     = document.getElementById("video");
+  const hitungEl  = document.getElementById("hitung");
+  const kilat     = document.getElementById("kilat");
+  const statusEl  = document.getElementById("status");
+  const btnMulai  = document.getElementById("btnMulai");
+  const btnUnduh  = document.getElementById("btnUnduh");
+  const btnUlang  = document.getElementById("btnUlang");
+  const areaKamera = document.getElementById("areaKamera");
+  const areaHasil  = document.getElementById("hasil");
+  const canvasStrip = document.getElementById("strip");
+
+  const fotoFotoAmbil = []; // tempat menyimpan foto sementara
+
+  const tunggu = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // ---------------------------------------------------------
+  // BAGIAN 4: NYALAKAN KAMERA
+  // ---------------------------------------------------------
+  async function nyalakanKamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 960 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      statusEl.textContent = "Ready, set, pose! Hit Start when you're ready!";
+      btnMulai.disabled = false;
+    } catch (err) {
+      statusEl.textContent = "Kamera tidak bisa dipakai. Cek izin kamera di browser, lalu muat ulang halaman.";
+    }
+  }
+
+  // ---------------------------------------------------------
+  // BAGIAN 5: AMBIL SATU FOTO DARI VIDEO
+  // ---------------------------------------------------------
+  function ambilFoto() {
+    // Canvas = "kertas gambar" tak terlihat tempat kita menempel gambar
+    const c = document.createElement("canvas");
+    c.width = lebarFoto;
+    c.height = tinggiFoto;
+    const ctx = c.getContext("2d");
+
+    // Potong video supaya pas dengan rasio foto (tidak gepeng)
+    const vw = video.videoWidth, vh = video.videoHeight;
+    let sw = vw, sh = vw / RASIO_FOTO;
+    if (sh > vh) { sh = vh; sw = vh * RASIO_FOTO; }
+    const sx = (vw - sw) / 2, sy = (vh - sh) / 2;
+
+    // Balik kiri-kanan supaya hasilnya sama dengan yang dilihat di layar
+    ctx.translate(lebarFoto, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, lebarFoto, tinggiFoto);
+    return c;
+  }
+
+  // ---------------------------------------------------------
+  // BAGIAN 6: PROSES FOTO 3 KALI
+  // ---------------------------------------------------------
+  async function mulaiSesi() {
+    btnMulai.disabled = true;
+    fotoFotoAmbil.length = 0;
+
+    for (let i = 1; i <= JUMLAH_FOTO; i++) {
+      statusEl.textContent = "Photo " + i + " of " + JUMLAH_FOTO;
+
+      for (let d = HITUNG_MUNDUR; d >= 1; d--) {
+        hitungEl.textContent = d;
+        await tunggu(1000);
+      }
+      hitungEl.textContent = "";
+
+      fotoFotoAmbil.push(ambilFoto());
+
+      // efek kilat
+      kilat.style.transition = "none";
+      kilat.style.opacity = 1;
+      await tunggu(60);
+      kilat.style.transition = "opacity .35s";
+      kilat.style.opacity = 0;
+
+      if (i < JUMLAH_FOTO) await tunggu(JEDA_ANTAR_FOTO);
+    }
+
+    await susunStrip();
+    areaKamera.style.display = "none";
+    areaHasil.style.display = "flex";
+  }
+
+  // ---------------------------------------------------------
+  // BAGIAN 7: SUSUN FOTO + FRAME JADI SATU STRIP
+  // ---------------------------------------------------------
+  async function susunStrip() {
+    canvasStrip.width = lebarStrip;
+    canvasStrip.height = tinggiStrip;
+    const ctx = canvasStrip.getContext("2d");
+
+    // 1) Cat dulu seluruh kertas dengan warna frame
+    ctx.fillStyle = WARNA_FRAME;
+    ctx.fillRect(0, 0, lebarStrip, tinggiStrip);
+
+    // 2) Tempel ketiga foto dari atas ke bawah
+    fotoFotoAmbil.forEach((foto, i) => {
+      const y = margin + i * (tinggiFoto + jarak);
+      ctx.drawImage(foto, margin, y);
+    });
+
+    // 3) Kalau ada desain frame (PNG transparan), tempel PALING ATAS
+    if (GAMBAR_FRAME) {
+      try {
+        const frame = await muatGambar(GAMBAR_FRAME);
+        ctx.drawImage(frame, 0, 0, lebarStrip, tinggiStrip);
+      } catch (e) {
+        console.log("Gambar frame tidak ditemukan:", GAMBAR_FRAME);
+      }
+    }
+  }
+
+  function muatGambar(src) {
+    return new Promise((ok, gagal) => {
+      const img = new Image();
+      img.onload = () => ok(img);
+      img.onerror = gagal;
+      img.src = src;
+    });
+  }
+
+  // ---------------------------------------------------------
+  // BAGIAN 8: TOMBOL-TOMBOL
+  // ---------------------------------------------------------
+  btnMulai.addEventListener("click", mulaiSesi);
+
+  btnUnduh.addEventListener("click", () => {
+    canvasStrip.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "lupikoriphotostrip.png";
+      a.click();
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  });
+
+  btnUlang.addEventListener("click", () => {
+    areaHasil.style.display = "none";
+    areaKamera.style.display = "block";
+    statusEl.textContent = "Ready, set, pose! Hit Start when you're ready!";
+    btnMulai.disabled = false;
+  });
+
+  // Jalankan saat halaman dibuka
+  nyalakanKamera();
+</script>
+</body>
+</html>
