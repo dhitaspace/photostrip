@@ -61,10 +61,10 @@
     font: inherit;
     padding: 12px 28px;
     border: 0; border-radius: 999px;
-    background: #fff; color: #20305a;
+    background: #f7f4d5; color: #20305a;
     cursor: pointer;
   }
-  button:hover { background: #e6ebff; }
+  button:hover { background: #0a3323; }
   button:disabled { opacity: .5; cursor: default; }
   button:focus-visible { outline: 3px solid #ffd54a; outline-offset: 2px; }
 
@@ -89,7 +89,7 @@
       <div id="hitung"></div>
       <div id="kilat"></div>
     </div>
-    <p id="status">Izinkan kamera ya, lalu tekan Mulai.</p>
+    <p id="status">Allow camera access to get started!.</p>
     <button id="btnMulai" disabled>Start</button>
   </div>
 
@@ -113,7 +113,7 @@
   const MARGIN_BAWAH   = 3;    // ruang kosong di bawah (cm)
   const RASIO_FOTO     = 4 / 3; // lebar : tinggi tiap foto (4/3 = landscape, 1 = kotak)
   const JUMLAH_FOTO    = 3;
-  const WARNA_FRAME    = "#ffffff";  // warna frame polos
+  const WARNA_FRAME    = "#fffbf1";  // warna frame polos
   const HITUNG_MUNDUR  = 3;    // detik sebelum tiap foto
   const JEDA_ANTAR_FOTO = 1200; // milidetik jeda setelah foto diambil
 
@@ -170,7 +170,7 @@
       statusEl.textContent = "Ready, set, pose! Hit Start when you're ready!";
       btnMulai.disabled = false;
     } catch (err) {
-      statusEl.textContent = "Kamera tidak bisa dipakai. Cek izin kamera di browser, lalu muat ulang halaman.";
+      statusEl.textContent = "Camera unavailable. Check your browser's camera permissions, then reload the page.";
     }
   }
 
